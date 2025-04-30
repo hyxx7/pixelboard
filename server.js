@@ -2,35 +2,31 @@ const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
-
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from "public" folder
-app.use(express.static('public'));
+app.use(express.static(__dirname + '/public'));
 
-// Store pixel data (format: { "x,y": color })
-let pixelData = {};
+let pixels = [];
 
 io.on('connection', (socket) => {
-  console.log('A user connected');
-
-  // Send current canvas to new client
-  socket.emit('load_canvas', pixelData);
-
-  // Handle draw events
-  socket.on('draw_pixel', ({ x, y, color }) => {
-    const key = `${x},${y}`;
-    pixelData[key] = color;
-
-    // Broadcast to others
-    socket.broadcast.emit('draw_pixel', { x, y, color });
+  socket.on('new_user', (name) => {
+    socket.username = name;
   });
 
-  socket.on('disconnect', () => {
-    console.log('A user disconnected');
+  socket.emit('init_pixels', pixels);
+
+  socket.on('draw_pixel', (data) => {
+    const existing = pixels.find(p => p.x === data.x && p.y === data.y);
+    if (!existing) pixels.push(data);
+    else Object.assign(existing, data);
+
+    io.emit('draw_pixel', {
+      ...data,
+      name: socket.username || 'Anonymous'
+    });
   });
 });
 
 http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
