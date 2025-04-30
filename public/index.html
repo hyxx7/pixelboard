@@ -13,12 +13,12 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      background-color: rgb(0, 21, 48);
+      background-color: white;
       font-family: BebasNeue-Regular, sans-serif;
-      color: white;
+      color: black;
     }
     canvas {
-      border: 1px solid black;
+      border: 1px solid #000;
       image-rendering: pixelated;
       cursor: crosshair;
       touch-action: none;
@@ -46,7 +46,6 @@
   <p>made by hyxx</p>
 
   <div id="controls">
-    <input type="text" id="username" placeholder="Your name">
     <input type="color" id="colorPicker" value="#ff0000">
     <label>Brush Size: <input type="number" id="brushSize" min="1" value="1"></label>
     <button id="eraserBtn">Eraser: Off</button>
@@ -63,36 +62,18 @@
     const colorPicker = document.getElementById('colorPicker');
     const eraserBtn = document.getElementById('eraserBtn');
     const brushSizeInput = document.getElementById('brushSize');
-    const usernameInput = document.getElementById('username');
 
     const pixelSize = 10;
     let erasing = false;
     let drawing = false;
 
-    let userName = '';
-
-    // Grid lines
-    function drawGrid() {
-      ctx.strokeStyle = '#ccc';
-      for (let x = 0; x <= canvas.width; x += pixelSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y <= canvas.height; y += pixelSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
-    }
+    // Clear and fill canvas white
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     function drawPixel(x, y, color) {
-      if (color !== '#ccc') {
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, pixelSize, pixelSize);
-      }
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, pixelSize, pixelSize);
     }
 
     function emitDraw(x, y) {
@@ -105,11 +86,7 @@
           const py = y + j * pixelSize;
           if (px < canvas.width && py < canvas.height) {
             drawPixel(px, py, color);
-            socket.emit('draw_pixel', {
-              x: px,
-              y: py,
-              color: color
-            });
+            socket.emit('draw_pixel', { x: px, y: py, color });
           }
         }
       }
@@ -127,7 +104,6 @@
     canvas.addEventListener('mouseup', () => drawing = false);
     canvas.addEventListener('mouseleave', () => drawing = false);
 
-    // Mobile support
     canvas.addEventListener('touchstart', (e) => {
       drawing = true;
       drawAtTouch(e);
@@ -162,29 +138,15 @@
       eraserBtn.classList.toggle("active", erasing);
     });
 
-    usernameInput.addEventListener('change', () => {
-      userName = usernameInput.value.trim();
-      socket.emit('new_user', userName);
-    });
-
-    socket.on('draw_pixel', ({ x, y, color, name }) => {
+    socket.on('draw_pixel', ({ x, y, color }) => {
       drawPixel(x, y, color);
-      if (name && !erasing) {
-        ctx.fillStyle = "black";
-        ctx.font = "8px sans-serif";
-        ctx.fillText(name, x + 1, y + 8);
-      }
     });
 
     socket.on('init_pixels', (pixels) => {
       for (let { x, y, color } of pixels) {
         drawPixel(x, y, color);
       }
-      drawGrid();
     });
-
-    // Initial grid
-    drawGrid();
   </script>
 </body>
 </html>
