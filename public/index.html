@@ -52,32 +52,62 @@
     const ctx = canvas.getContext('2d');
     const colorPicker = document.getElementById('colorPicker');
     const eraserBtn = document.getElementById('eraserBtn');
+    const socket = io();
 
     const pixelSize = 10;
     let erasing = false;
-    const socket = io();
+    let isDrawing = false;
 
     // Fill canvas with white
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    canvas.addEventListener('click', (e) => {
+    function getPixelCoords(e) {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / pixelSize) * pixelSize;
       const y = Math.floor((e.clientY - rect.top) / pixelSize) * pixelSize;
-      const color = erasing ? "#ffffff" : colorPicker.value;
-
-      drawPixel(x, y, color);
-      socket.emit('draw_pixel', { x, y, color });
-    });
+      return { x, y };
+    }
 
     function drawPixel(x, y, color) {
       ctx.fillStyle = color;
       ctx.fillRect(x, y, pixelSize, pixelSize);
     }
 
+    // Mouse draw handlers
+    canvas.addEventListener('mousedown', (e) => {
+      isDrawing = true;
+      const { x, y } = getPixelCoords(e);
+      const color = erasing ? "#ffffff" : colorPicker.value;
+      drawPixel(x, y, color);
+      socket.emit('draw_pixel', { x, y, color });
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      isDrawing = false;
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      isDrawing = false;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDrawing) return;
+      const { x, y } = getPixelCoords(e);
+      const color = erasing ? "#ffffff" : colorPicker.value;
+      drawPixel(x, y, color);
+      socket.emit('draw_pixel', { x, y, color });
+    });
+
     socket.on('draw_pixel', ({ x, y, color }) => {
       drawPixel(x, y, color);
+    });
+
+    socket.on('load_canvas', (data) => {
+      for (const key in data) {
+        const [x, y] = key.split(',').map(Number);
+        drawPixel(x, y, data[key]);
+      }
     });
 
     eraserBtn.addEventListener('click', () => {
