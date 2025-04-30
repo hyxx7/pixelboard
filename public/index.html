@@ -62,6 +62,18 @@
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Draw the grid outlines
+    function drawGrid() {
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";  // Light grey color for grid lines
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += pixelSize) {
+        for (let y = 0; y < canvas.height; y += pixelSize) {
+          ctx.strokeRect(x, y, pixelSize, pixelSize);  // Outline each pixel
+        }
+      }
+    }
+
+    // Function to get pixel coordinates based on event
     function getPixelCoords(e) {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / pixelSize) * pixelSize;
@@ -69,15 +81,13 @@
       return { x, y };
     }
 
+    // Function to draw a pixel
     function drawPixel(x, y, color) {
       ctx.fillStyle = color;
       ctx.fillRect(x, y, pixelSize, pixelSize);
-      ctx.strokeStyle = "rgba(0,0,0,0.2)"; // light border
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, pixelSize, pixelSize);
     }
 
-    // Mouse or touch event: Start drawing
+    // Start drawing
     function startDrawing(e) {
       isDrawing = true;
       const { x, y } = getPixelCoords(e);
@@ -86,12 +96,12 @@
       socket.emit('draw_pixel', { x, y, color });
     }
 
-    // Mouse or touch event: Stop drawing
+    // Stop drawing
     function stopDrawing() {
       isDrawing = false;
     }
 
-    // Mouse or touch event: Draw while moving (dragging)
+    // Draw while dragging
     function drawWhileDragging(e) {
       if (!isDrawing) return;
       const { x, y } = getPixelCoords(e);
@@ -129,6 +139,10 @@
       }
     });
 
+    // Draw the grid initially
+    drawGrid();
+
+    // Toggle eraser
     eraserBtn.addEventListener('click', () => {
       erasing = !erasing;
       eraserBtn.textContent = erasing ? "Eraser: On" : "Eraser: Off";
