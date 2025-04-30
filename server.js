@@ -9,10 +9,6 @@ app.use(express.static(__dirname + '/public'));
 let pixels = [];
 
 io.on('connection', (socket) => {
-  socket.on('new_user', (name) => {
-    socket.username = name;
-  });
-
   socket.emit('init_pixels', pixels);
 
   socket.on('draw_pixel', (data) => {
@@ -20,10 +16,7 @@ io.on('connection', (socket) => {
     if (!existing) pixels.push(data);
     else Object.assign(existing, data);
 
-    io.emit('draw_pixel', {
-      ...data,
-      name: socket.username || 'Anonymous'
-    });
+    io.emit('draw_pixel', data);
   });
 });
 
