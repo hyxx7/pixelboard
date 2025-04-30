@@ -72,31 +72,50 @@
     function drawPixel(x, y, color) {
       ctx.fillStyle = color;
       ctx.fillRect(x, y, pixelSize, pixelSize);
+      ctx.strokeStyle = "rgba(0,0,0,0.2)"; // light border
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, pixelSize, pixelSize);
     }
 
-    // Mouse draw handlers
-    canvas.addEventListener('mousedown', (e) => {
+    // Mouse or touch event: Start drawing
+    function startDrawing(e) {
       isDrawing = true;
       const { x, y } = getPixelCoords(e);
       const color = erasing ? "#ffffff" : colorPicker.value;
       drawPixel(x, y, color);
       socket.emit('draw_pixel', { x, y, color });
-    });
+    }
 
-    canvas.addEventListener('mouseup', () => {
+    // Mouse or touch event: Stop drawing
+    function stopDrawing() {
       isDrawing = false;
-    });
+    }
 
-    canvas.addEventListener('mouseleave', () => {
-      isDrawing = false;
-    });
-
-    canvas.addEventListener('mousemove', (e) => {
+    // Mouse or touch event: Draw while moving (dragging)
+    function drawWhileDragging(e) {
       if (!isDrawing) return;
       const { x, y } = getPixelCoords(e);
       const color = erasing ? "#ffffff" : colorPicker.value;
       drawPixel(x, y, color);
       socket.emit('draw_pixel', { x, y, color });
+    }
+
+    // Event listeners for drawing
+    // Mouse events (for PC)
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
+    canvas.addEventListener('mousemove', drawWhileDragging);
+
+    // Touch events (for mobile)
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();  // Prevent scrolling
+      startDrawing(e.touches[0]);
+    });
+    canvas.addEventListener('touchend', stopDrawing);
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();  // Prevent scrolling
+      drawWhileDragging(e.touches[0]);
     });
 
     socket.on('draw_pixel', ({ x, y, color }) => {
