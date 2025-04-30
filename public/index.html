@@ -4,148 +4,170 @@
   <meta charset="UTF-8">
   <title>PixelBoard</title>
   <style>
-    @font-face {
-      font-family: BebasNeue-Regular;
-      src: url(BebasNeue-Regular.ttf);
-    }
     body {
       margin: 0;
+      font-family: sans-serif;
+      background-color: white;
       display: flex;
       flex-direction: column;
       align-items: center;
-      background-color: white;
-      font-family: BebasNeue-Regular, sans-serif;
-      color: black;
     }
     canvas {
       border: 1px solid #000;
       image-rendering: pixelated;
       cursor: crosshair;
-      touch-action: none;
     }
     #controls {
       margin: 10px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
     }
-    #eraserBtn.active {
-      background-color: #ccc;
-    }
-    input, button {
-      font-family: inherit;
-      font-weight: bold;
+    #chat {
+      width: 300px;
+      height: 200px;
+      overflow-y: scroll;
+      border: 1px solid #aaa;
+      margin-top: 10px;
       padding: 5px;
+    }
+    #users {
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    #chatInput {
+      width: 300px;
+    }
+    .cursor {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10;
+      font-size: 10px;
+      white-space: nowrap;
     }
   </style>
 </head>
 <body>
 
   <h1>PixelBoard</h1>
-  <p>made by ali legend</p>
 
   <div id="controls">
-    <input type="color" id="colorPicker" value="#ff0000">
-    <label>Brush Size: <input type="number" id="brushSize" min="1" value="1"></label>
-    <button id="eraserBtn">Eraser: Off</button>
+    <input type="color" id="colorPicker" value="#000000">
+    <input type="range" id="brushSize" min="1" max="10" value="1">
   </div>
 
   <canvas id="pixelCanvas" width="1000" height="1000"></canvas>
+
+  <div id="chat"></div>
+  <input type="text" id="chatInput" placeholder="Type a message...">
+
+  <div id="users">Online Users:</div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const canvas = document.getElementById('pixelCanvas');
     const ctx = canvas.getContext('2d');
     const socket = io();
-
     const colorPicker = document.getElementById('colorPicker');
-    const eraserBtn = document.getElementById('eraserBtn');
     const brushSizeInput = document.getElementById('brushSize');
+    const chatBox = document.getElementById('chat');
+    const chatInput = document.getElementById('chatInput');
+    const usersList = document.getElementById('users');
 
     const pixelSize = 10;
-    let erasing = false;
+    let brushSize = 1;
     let drawing = false;
+    let myColor = "#000";
+    const cursors = {};
 
-    // Clear and fill canvas white
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    function drawPixel(x, y, color) {
+    const drawPixel = (x, y, color, size = 1) => {
       ctx.fillStyle = color;
-      ctx.fillRect(x, y, pixelSize, pixelSize);
-    }
+      ctx.fillRect(x, y, size * pixelSize, size * pixelSize);
+    };
 
-    function emitDraw(x, y) {
-      const color = erasing ? "#ffffff" : colorPicker.value;
-      const brushSize = parseInt(brushSizeInput.value);
-
-      for (let i = 0; i < brushSize; i++) {
-        for (let j = 0; j < brushSize; j++) {
-          const px = x + i * pixelSize;
-          const py = y + j * pixelSize;
-          if (px < canvas.width && py < canvas.height) {
-            drawPixel(px, py, color);
-            socket.emit('draw_pixel', { x: px, y: py, color });
-          }
-        }
-      }
-    }
-
-    canvas.addEventListener('mousedown', (e) => {
-      drawing = true;
-      drawAtMouse(e);
-    });
-
-    canvas.addEventListener('mousemove', (e) => {
-      if (drawing) drawAtMouse(e);
-    });
-
+    // Emit drawing
+    canvas.addEventListener('mousedown', () => drawing = true);
     canvas.addEventListener('mouseup', () => drawing = false);
     canvas.addEventListener('mouseleave', () => drawing = false);
 
-    canvas.addEventListener('touchstart', (e) => {
-      drawing = true;
-      drawAtTouch(e);
-    });
-
-    canvas.addEventListener('touchmove', (e) => {
-      if (drawing) drawAtTouch(e);
-    });
-
-    canvas.addEventListener('touchend', () => drawing = false);
-
-    function drawAtMouse(e) {
+    canvas.addEventListener('mousemove', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x = Math.floor((e.clientX - rect.left) / pixelSize) * pixelSize;
       const y = Math.floor((e.clientY - rect.top) / pixelSize) * pixelSize;
-      emitDraw(x, y);
-    }
+      socket.emit('cursor_move', { x, y });
 
-    function drawAtTouch(e) {
-      const rect = canvas.getBoundingClientRect();
-      for (let touch of e.touches) {
-        const x = Math.floor((touch.clientX - rect.left) / pixelSize) * pixelSize;
-        const y = Math.floor((touch.clientY - rect.top) / pixelSize) * pixelSize;
-        emitDraw(x, y);
+      if (drawing) {
+        drawPixel(x, y, myColor, brushSize);
+        socket.emit('draw_pixel', { x, y, color: myColor, size: brushSize });
       }
-      e.preventDefault();
-    }
-
-    eraserBtn.addEventListener('click', () => {
-      erasing = !erasing;
-      eraserBtn.textContent = erasing ? "Eraser: On" : "Eraser: Off";
-      eraserBtn.classList.toggle("active", erasing);
     });
 
-    socket.on('draw_pixel', ({ x, y, color }) => {
-      drawPixel(x, y, color);
+    // Brush size update
+    brushSizeInput.addEventListener('input', () => {
+      brushSize = parseInt(brushSizeInput.value);
     });
 
-    socket.on('init_pixels', (pixels) => {
-      for (let { x, y, color } of pixels) {
-        drawPixel(x, y, color);
+    colorPicker.addEventListener('input', () => {
+      myColor = colorPicker.value;
+    });
+
+    // Draw from others
+    socket.on('draw_pixel', ({ x, y, color, size }) => {
+      drawPixel(x, y, color, size);
+    });
+
+    // Cursor updates
+    socket.on('cursor_update', ({ id, pos }) => {
+      let el = cursors[id];
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'cursor';
+        el.style.color = users[id]?.color || 'black';
+        el.textContent = `👆 ${id.slice(0, 4)}`;
+        document.body.appendChild(el);
+        cursors[id] = el;
       }
+      el.style.left = (canvas.offsetLeft + pos.x + 10) + 'px';
+      el.style.top = (canvas.offsetTop + pos.y + 10) + 'px';
+    });
+
+    socket.on('user_left', (id) => {
+      const el = cursors[id];
+      if (el) el.remove();
+      delete cursors[id];
+    });
+
+    // Initial canvas state
+    socket.on('init', ({ canvasState, users }) => {
+      canvasState.forEach(({ x, y, color, size }) => {
+        drawPixel(x, y, color, size);
+      });
+      updateUsers(users);
+    });
+
+    socket.on('user_list', updateUsers);
+    socket.on('user_joined', ({ id, color }) => {
+      users[id] = { id, color };
+    });
+
+    function updateUsers(users) {
+      let html = '<strong>Online Users:</strong><br>';
+      for (let id in users) {
+        html += `<span style="color:${users[id].color}">${id.slice(0, 4)}</span><br>`;
+      }
+      usersList.innerHTML = html;
+    }
+
+    // Chat
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && chatInput.value.trim()) {
+        socket.emit('chat_message', chatInput.value.trim());
+        chatInput.value = '';
+      }
+    });
+
+    socket.on('chat_message', ({ id, color, msg }) => {
+      const msgLine = document.createElement('div');
+      msgLine.innerHTML = `<strong style="color:${color}">${id.slice(0, 4)}</strong>: ${msg}`;
+      chatBox.appendChild(msgLine);
+      chatBox.scrollTop = chatBox.scrollHeight;
     });
   </script>
 </body>
