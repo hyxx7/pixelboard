@@ -4,7 +4,8 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const PORT = process.env.PORT || 3000;
 
-app.use(express.static(__dirname));
+app.use(express.static(__dirname + '/public'));
+
 
 let pixels = {};  // store drawn pixels
 let users = {};   // store connected users
