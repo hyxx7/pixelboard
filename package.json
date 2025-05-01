@@ -1,6 +1,7 @@
 {
   "name": "pixelboard",
   "version": "1.0.0",
+  "description": "Collaborative pixel drawing board",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
