@@ -1,16 +1,23 @@
 const express = require('express');
+const http = require('http');
 const path = require('path');
+const socketIO = require('socket.io');
+
 const app = express();
-const server = require('http').createServer(app);
-const io = require('socket.io')(server);
+const server = http.createServer(app);
+const io = socketIO(server);
+
 const PORT = process.env.PORT || 3000;
 
 const canvas = new Array(1000).fill('#FFFFFF');
 const users = {};
 
-app.use(express.static(__dirname));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// Serve static files from "public" folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve index.html on root path
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 io.on('connection', (socket) => {
@@ -56,5 +63,5 @@ function randomColor() {
 }
 
 server.listen(PORT, () => {
-  console.log(`PixelBoard live at http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
