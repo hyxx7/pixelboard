@@ -1,14 +1,21 @@
 const express = require('express');
+const path = require('path');
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
 
 const PORT = process.env.PORT || 3000;
 
+// Serve static files from current directory
 app.use(express.static(__dirname));
-app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
-const canvas = new Array(1000).fill('#FFFFFF'); // white default
+// Always return index.html for any route
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// --- PIXEL BOARD LOGIC ---
+const canvas = new Array(1000).fill('#FFFFFF'); // 1000 pixels
 const users = {};
 
 io.on('connection', (socket) => {
@@ -17,7 +24,6 @@ io.on('connection', (socket) => {
   users[socket.id] = { name: 'Guest', color: userColor };
 
   socket.emit('init', { canvas, users, id: socket.id });
-
   io.emit('user_update', users);
 
   socket.on('draw_pixel', ({ index, color }) => {
@@ -38,6 +44,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('chat', (msg) => {
+    io.emit('chat', { id: socket.id, msg });
+  });
+
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
     delete users[socket.id];
@@ -52,5 +62,5 @@ function getRandomColor() {
 }
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`✅ PixelBoard running at http://localhost:${PORT}`);
 });
