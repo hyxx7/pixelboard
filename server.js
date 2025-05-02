@@ -1,49 +1,56 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-
+const express = require('express');
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const server = require('http').createServer(app);
+const io = require('socket.io')(server);
 
-const canvasData = [];
+const PORT = process.env.PORT || 3000;
 
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/index.html");
+app.use(express.static(__dirname));
+app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
+
+const canvas = new Array(1000).fill('#FFFFFF'); // white default
+const users = {};
+
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id}`);
+  const userColor = getRandomColor();
+  users[socket.id] = { name: 'Guest', color: userColor };
+
+  socket.emit('init', { canvas, users, id: socket.id });
+
+  io.emit('user_update', users);
+
+  socket.on('draw_pixel', ({ index, color }) => {
+    if (index >= 0 && index < canvas.length) {
+      canvas[index] = color;
+      io.emit('draw_pixel', { index, color });
+    }
+  });
+
+  socket.on('cursor_move', (pos) => {
+    socket.broadcast.emit('cursor_move', { id: socket.id, ...pos });
+  });
+
+  socket.on('set_name', (name) => {
+    if (name.length > 0 && name.length <= 20) {
+      users[socket.id].name = name;
+      io.emit('user_update', users);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+    delete users[socket.id];
+    io.emit('user_update', users);
+    socket.broadcast.emit('remove_cursor', socket.id);
+  });
 });
-app.use("/socket.io", express.static(__dirname + "/node_modules/socket.io/client-dist"));
 
-const users = new Map();
+function getRandomColor() {
+  const hue = Math.floor(Math.random() * 360);
+  return `hsl(${hue}, 70%, 60%)`;
+}
 
-io.on("connection", (socket) => {
-  users.set(socket.id, { name: "Anonymous" });
-  io.emit("users", Array.from(users.values()));
-
-  socket.on("set_name", (name) => {
-    users.set(socket.id, { name });
-    io.emit("users", Array.from(users.values()));
-  });
-
-  socket.on("draw_pixel", ({ x, y, color }) => {
-    canvasData.push({ x, y, color });
-    socket.broadcast.emit("draw_pixel", { x, y, color });
-  });
-
-  socket.on("get_canvas", () => {
-    socket.emit("canvas_data", canvasData);
-  });
-
-  socket.on("chat", (msg) => {
-    const user = users.get(socket.id) || { name: "Unknown" };
-    io.emit("chat", user.name + ": " + msg);
-  });
-
-  socket.on("disconnect", () => {
-    users.delete(socket.id);
-    io.emit("users", Array.from(users.values()));
-  });
-});
-
-server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+server.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
