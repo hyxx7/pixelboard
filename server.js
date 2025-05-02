@@ -3,42 +3,37 @@ const path = require('path');
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server);
-
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from current directory
-app.use(express.static(__dirname));
+const canvas = new Array(1000).fill('#FFFFFF');
+const users = {};
 
-// Always return index.html for any route
+app.use(express.static(__dirname));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- PIXEL BOARD LOGIC ---
-const canvas = new Array(1000).fill('#FFFFFF'); // 1000 pixels
-const users = {};
-
 io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
-  const userColor = getRandomColor();
-  users[socket.id] = { name: 'Guest', color: userColor };
+  console.log(`Connected: ${socket.id}`);
+  const color = randomColor();
+  users[socket.id] = { name: 'Guest', color };
 
   socket.emit('init', { canvas, users, id: socket.id });
   io.emit('user_update', users);
 
   socket.on('draw_pixel', ({ index, color }) => {
-    if (index >= 0 && index < canvas.length) {
+    if (index >= 0 && index < 1000) {
       canvas[index] = color;
       io.emit('draw_pixel', { index, color });
     }
   });
 
-  socket.on('cursor_move', (pos) => {
-    socket.broadcast.emit('cursor_move', { id: socket.id, ...pos });
+  socket.on('cursor', (data) => {
+    socket.broadcast.emit('cursor', { id: socket.id, ...data });
   });
 
   socket.on('set_name', (name) => {
-    if (name.length > 0 && name.length <= 20) {
+    if (typeof name === 'string' && name.length <= 20) {
       users[socket.id].name = name;
       io.emit('user_update', users);
     }
@@ -49,18 +44,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
     delete users[socket.id];
-    io.emit('user_update', users);
     socket.broadcast.emit('remove_cursor', socket.id);
+    io.emit('user_update', users);
   });
 });
 
-function getRandomColor() {
+function randomColor() {
   const hue = Math.floor(Math.random() * 360);
-  return `hsl(${hue}, 70%, 60%)`;
+  return `hsl(${hue}, 80%, 60%)`;
 }
 
 server.listen(PORT, () => {
-  console.log(`✅ PixelBoard running at http://localhost:${PORT}`);
+  console.log(`PixelBoard live at http://localhost:${PORT}`);
 });
