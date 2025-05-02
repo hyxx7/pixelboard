@@ -1,184 +1,248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
   <title>PixelBoard</title>
   <style>
-    body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-    #toolbar { background: #333; color: white; padding: 5px; display: flex; align-items: center; gap: 10px; }
-    #toolbar input[type="color"], #toolbar input[type="number"] { margin-right: 10px; }
-    #canvas { flex: 1; display: grid; grid-template-columns: repeat(40, 1fr); max-width: 100vw; }
-    .pixel { width: 100%; aspect-ratio: 1; box-sizing: border-box; border: 1px solid #eee; }
-    #chat { height: 150px; display: flex; flex-direction: column; }
-    #messages { flex: 1; overflow-y: auto; background: #f0f0f0; padding: 5px; }
-    #form { display: flex; }
-    #form input { flex: 1; padding: 5px; }
-    #form button { padding: 5px; }
-    #cursors { position: absolute; top: 0; left: 0; pointer-events: none; }
-    .cursor-label { position: absolute; font-size: 12px; transform: translate(-50%, -150%); white-space: nowrap; }
-    #users { font-size: 14px; margin-left: auto; }
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 8px;
+      background: #eee;
+      align-items: center;
+      gap: 10px;
+    }
+    #canvas {
+      display: grid;
+      grid-template-columns: repeat(40, 1fr);
+      grid-auto-rows: 20px;
+      flex: 1;
+      background: #ddd;
+      touch-action: none;
+    }
+    .pixel {
+      width: 20px;
+      height: 20px;
+      background: white;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+    }
+    #chat {
+      height: 150px;
+      display: flex;
+      flex-direction: column;
+    }
+    #chatLog {
+      flex: 1;
+      overflow-y: auto;
+      padding: 5px;
+      background: #f9f9f9;
+    }
+    #chatInput {
+      display: flex;
+    }
+    #chatInput input {
+      flex: 1;
+      padding: 5px;
+    }
+    #chatInput button {
+      padding: 5px 10px;
+    }
+    .cursor {
+      position: absolute;
+      pointer-events: none;
+      font-size: 14px;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
+
   <div id="toolbar">
-    <label>Color: <input type="color" id="colorPicker" /></label>
-    <label>Brush Size: <input type="number" id="brushSize" value="1" min="1" max="20" /></label>
-    <button onclick="tool='brush'">🖌️ Brush</button>
-    <button onclick="tool='eraser'">🧽 Eraser</button>
-    <label>Name: <input type="text" id="nameInput" placeholder="Your name" maxlength="20" /></label>
-    <button onclick="setName()">Rename</button>
-    <div id="users"></div>
+    <label>Brush Size: <input type="range" id="brushSize" min="1" max="20" value="1"></label>
+    <input type="color" id="colorPicker" value="#000000">
+    <button id="eraser">🧽 Eraser</button>
+    <input id="nameInput" placeholder="Change name..." maxlength="20">
   </div>
+
   <div id="canvas"></div>
-  <div id="cursors"></div>
+
   <div id="chat">
-    <div id="messages"></div>
-    <form id="form">
-      <input id="msgInput" autocomplete="off" placeholder="Type a message..." />
-      <button>Send</button>
-    </form>
+    <div id="chatLog"></div>
+    <div id="chatInput">
+      <input id="chatMsg" placeholder="Type a message...">
+      <button id="sendBtn">Send</button>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
     const canvas = document.getElementById('canvas');
-    const cursors = document.getElementById('cursors');
     const colorPicker = document.getElementById('colorPicker');
-    const brushSizeInput = document.getElementById('brushSize');
+    const brushSize = document.getElementById('brushSize');
+    const eraser = document.getElementById('eraser');
     const nameInput = document.getElementById('nameInput');
-    const usersDiv = document.getElementById('users');
-    let tool = 'brush';
-    let userId;
-    const pixelElements = [];
+    const chatLog = document.getElementById('chatLog');
+    const chatMsg = document.getElementById('chatMsg');
+    const sendBtn = document.getElementById('sendBtn');
+
+    let userId = null;
+    let currentColor = colorPicker.value;
+    let isDrawing = false;
+    let pixels = [];
+    let cursorMap = {};
 
     for (let i = 0; i < 1000; i++) {
       const div = document.createElement('div');
       div.className = 'pixel';
       div.dataset.index = i;
       canvas.appendChild(div);
-      pixelElements.push(div);
+      pixels.push(div);
+    }
+
+    function draw(index, color) {
+      if (pixels[index]) {
+        pixels[index].style.background = color;
+      }
     }
 
     socket.on('init', ({ canvas: saved, users, id }) => {
       userId = id;
-      saved.forEach((color, i) => pixelElements[i].style.background = color);
-      updateUserList(users);
+      saved.forEach((color, i) => draw(i, color));
+      updateCursors(users);
     });
 
-    socket.on('draw_pixel', ({ index, color }) => {
-      if (index >= 0 && index < 1000) {
-        pixelElements[index].style.background = color;
+    socket.on('draw_pixel', ({ index, color }) => draw(index, color));
+
+    socket.on('user_update', updateCursors);
+
+    socket.on('cursor', ({ id, x, y }) => {
+      let cursor = cursorMap[id];
+      if (!cursor) {
+        cursor = document.createElement('div');
+        cursor.className = 'cursor';
+        document.body.appendChild(cursor);
+        cursorMap[id] = cursor;
       }
+      cursor.style.left = x + 'px';
+      cursor.style.top = y + 'px';
     });
 
-    socket.on('user_update', updateUserList);
-
-    socket.on('cursor_move', ({ id, x, y }) => {
-      let el = document.getElementById('cursor-' + id);
-      if (!el) {
-        el = document.createElement('div');
-        el.className = 'cursor-label';
-        el.id = 'cursor-' + id;
-        cursors.appendChild(el);
-      }
-      const user = usersMap[id];
-      el.textContent = `${user?.name || 'Guest'} 🖌️`;
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
-      el.style.color = user?.color || '#000';
-    });
-
-    socket.on('remove_cursor', id => {
-      const el = document.getElementById('cursor-' + id);
-      if (el) el.remove();
-    });
-
-    const usersMap = {};
-    function updateUserList(users) {
-      usersMap = users;
-      usersDiv.textContent = 'Users: ' + Object.values(users).map(u => u.name).join(', ');
-    }
-
-    function setName() {
-      const name = nameInput.value.trim();
-      if (name) socket.emit('set_name', name);
-    }
-
-    canvas.addEventListener('pointerdown', drawStart);
-    canvas.addEventListener('pointermove', drawMove);
-    canvas.addEventListener('pointerup', () => drawing = false);
-    canvas.addEventListener('pointerleave', () => drawing = false);
-
-    let drawing = false;
-    function drawStart(e) {
-      drawing = true;
-      applyDraw(e);
-    }
-
-    function drawMove(e) {
-      const { clientX: x, clientY: y } = e;
-      socket.emit('cursor_move', { x, y });
-      if (drawing) applyDraw(e);
-    }
-
-    function applyDraw(e) {
-      const rect = canvas.getBoundingClientRect();
-      const size = parseInt(brushSizeInput.value);
-      const col = Math.floor((e.clientX - rect.left) / (rect.width / 40));
-      const row = Math.floor((e.clientY - rect.top) / (rect.width / 40));
-      for (let dy = 0; dy < size; dy++) {
-        for (let dx = 0; dx < size; dx++) {
-          const r = row + dy;
-          const c = col + dx;
-          const i = r * 40 + c;
-          if (i >= 0 && i < 1000 && c < 40) {
-            const color = tool === 'brush' ? colorPicker.value : '#FFFFFF';
-            socket.emit('draw_pixel', { index: i, color });
-          }
-        }
-      }
-    }
-
-    // Chat
-    const form = document.getElementById('form');
-    const input = document.getElementById('msgInput');
-    const messages = document.getElementById('messages');
-
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      if (input.value.trim()) {
-        const msg = `<b>${usersMap[userId]?.name || 'You'}:</b> ${input.value}`;
-        const div = document.createElement('div');
-        div.innerHTML = msg;
-        messages.appendChild(div);
-        socket.emit('chat', input.value);
-        input.value = '';
-        messages.scrollTop = messages.scrollHeight;
+    socket.on('remove_cursor', (id) => {
+      if (cursorMap[id]) {
+        cursorMap[id].remove();
+        delete cursorMap[id];
       }
     });
 
     socket.on('chat', ({ id, msg }) => {
       const div = document.createElement('div');
-      div.innerHTML = `<b>${usersMap[id]?.name || 'Guest'}:</b> ${msg}`;
-      messages.appendChild(div);
-      messages.scrollTop = messages.scrollHeight;
+      div.textContent = `${id.slice(0, 4)}: ${msg}`;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
     });
 
-    // Receive and send chat messages
-    socket.on('chat', data => {
-      const msg = `<b>${usersMap[data.id]?.name || 'Guest'}:</b> ${data.msg}`;
-      const div = document.createElement('div');
-      div.innerHTML = msg;
-      messages.appendChild(div);
-      messages.scrollTop = messages.scrollHeight;
+    canvas.addEventListener('mousedown', () => isDrawing = true);
+    canvas.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mouseleave', () => isDrawing = false);
+    canvas.addEventListener('touchstart', e => {
+      isDrawing = true;
+      drawTouch(e);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', e => {
+      drawTouch(e);
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => isDrawing = false);
+
+    function drawTouch(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (el?.classList.contains('pixel')) {
+        paint(el);
+      }
+    }
+
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      socket.emit('cursor', { x: e.clientX, y: e.clientY });
+      if (isDrawing) {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        if (el?.classList.contains('pixel')) {
+          paint(el);
+        }
+      }
     });
 
-    // Send chat
-    socket.on('connect', () => {
-      socket.on('chat', msg => console.log(msg));
+    function paint(el) {
+      const index = parseInt(el.dataset.index);
+      const size = parseInt(brushSize.value);
+      const base = index;
+      const row = Math.floor(index / 40);
+
+      for (let dy = -Math.floor(size / 2); dy <= Math.floor(size / 2); dy++) {
+        for (let dx = -Math.floor(size / 2); dx <= Math.floor(size / 2); dx++) {
+          const x = (index % 40) + dx;
+          const y = row + dy;
+          const i = y * 40 + x;
+          if (x >= 0 && x < 40 && y >= 0 && i >= 0 && i < 1000) {
+            socket.emit('draw_pixel', { index: i, color: currentColor });
+          }
+        }
+      }
+    }
+
+    colorPicker.addEventListener('input', () => currentColor = colorPicker.value);
+    eraser.addEventListener('click', () => currentColor = '#FFFFFF');
+
+    nameInput.addEventListener('change', () => {
+      const name = nameInput.value.trim();
+      if (name) {
+        socket.emit('set_name', name);
+      }
     });
+
+    sendBtn.addEventListener('click', sendChat);
+    chatMsg.addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendChat();
+    });
+
+    function sendChat() {
+      const msg = chatMsg.value.trim();
+      if (msg) {
+        socket.emit('chat', msg);
+        chatMsg.value = '';
+      }
+    }
+
+    function updateCursors(users) {
+      for (const id in cursorMap) {
+        if (!users[id]) {
+          cursorMap[id].remove();
+          delete cursorMap[id];
+        }
+      }
+      for (const id in users) {
+        if (!cursorMap[id]) {
+          const c = document.createElement('div');
+          c.className = 'cursor';
+          document.body.appendChild(c);
+          cursorMap[id] = c;
+        }
+        const user = users[id];
+        cursorMap[id].textContent = `🖌️ ${user.name}`;
+        cursorMap[id].style.color = user.color;
+      }
+    }
   </script>
+
 </body>
 </html>
